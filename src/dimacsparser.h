@@ -31,6 +31,8 @@ THE SOFTWARE.
 #include <cmath>
 
 using namespace CMSat;
+
+
 using std::vector;
 
 template <class C>
@@ -45,6 +47,9 @@ class DimacsParser
             uint32_t offset_vars = 0);
         uint64_t max_var = std::numeric_limits<uint64_t>::max();
         vector<uint32_t> sampling_vars;
+	vector<uint32_t> x_vars;
+	vector<int32_t> temp_vector;
+	vector<vector<int32_t> > clauses_list;
         const std::string dimacs_spec = "http://www.satcompetition.org/2009/format-benchmarks2009.html";
         const std::string please_read_dimacs = "\nPlease read DIMACS specification at http://www.satcompetition.org/2009/format-benchmarks2009.html";
 
@@ -60,6 +65,7 @@ class DimacsParser
         bool parse_solve_simp_comment(C& in, const bool solve);
         void write_solution_to_debuglib_file(const lbool ret) const;
         bool parseIndependentSet(C& in);
+	bool parseIndependentSet_X(C& in);
         std::string get_debuglib_fname() const;
 
 
@@ -86,6 +92,7 @@ class DimacsParser
 
         size_t norm_clauses_added = 0;
         size_t xor_clauses_added = 0;
+
 };
 
 #include <sstream>
@@ -182,7 +189,7 @@ bool DimacsParser<C>::readClause(C& in)
             assert(!strict_header);
             solver->new_vars(var - solver->nVars() +1);
         }
-
+	temp_vector.push_back(parsed_lit);
         lits.push_back( (parsed_lit > 0) ? Lit(var, false) : Lit(var, true) );
         if (*in != ' ') {
             std::cerr
@@ -384,6 +391,12 @@ bool DimacsParser<C>::parseComments(C& in, const std::string& str)
         if (!parseIndependentSet(in)) {
             return false;
         }
+    } 
+    else if (str == "ret") {
+        //cout<<"x vars looking.."<<endl;
+        if (!parseIndependentSet_X(in)) {
+            return false;
+        }
     } else {
         if (verbosity >= 6) {
             cout
@@ -401,6 +414,7 @@ template<class C>
 bool DimacsParser<C>::parse_and_add_clause(C& in)
 {
     lits.clear();
+    temp_vector.clear();
     if (!readClause(in)) {
         return false;
     }
@@ -410,6 +424,8 @@ bool DimacsParser<C>::parse_and_add_clause(C& in)
     }
     lineNum++;
     solver->add_clause(lits);
+    //cout<<"lits"<<lits;
+    clauses_list.push_back(temp_vector);
     norm_clauses_added++;
     return true;
 }
@@ -488,7 +504,6 @@ bool DimacsParser<C>::parse_DIMACS_main(C& in)
             break;
         }
     }
-
     return true;
 }
 
@@ -509,8 +524,7 @@ bool DimacsParser<C>::parse_DIMACS(
         return false;
     }
 
-    if (verbosity) {
-        cout
+    if (verbosity) {cout
         << "c -- clauses added: " << norm_clauses_added << endl
         << "c -- xor clauses added: " << xor_clauses_added << endl
         << "c -- vars added " << (solver->nVars() - origNumVars)
@@ -536,5 +550,21 @@ bool DimacsParser<C>::parseIndependentSet(C& in)
     }
     return true;
 }
-
+template<class C>
+bool DimacsParser<C>::parseIndependentSet_X(C& in)
+{
+    int32_t parsed_lit;
+    for (;;) {
+        if (!in.parseInt(parsed_lit, lineNum)) {
+            return false;
+        }
+        if (parsed_lit == 0) {
+            break;
+        }
+        uint32_t var = std::abs(parsed_lit) - 1;
+	//cout<<"pushing in x vars "<<var<<endl;
+        x_vars.push_back(var);
+    }
+    return true;
+}
 #endif //DIMACSPARSER_H
